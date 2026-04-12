@@ -4,6 +4,7 @@ A fully decentralized, permissionless Carbon Credit Marketplace built on the Ste
 
 This platform allows anyone to list, buy, and trade carbon credits without any central authority — ensuring transparency, security, and trust.
 
+🔗 Live Demo : https://carbon-credit-marketplace-sage.vercel.app/
 ---
 
 ## 🚀 Project Description
