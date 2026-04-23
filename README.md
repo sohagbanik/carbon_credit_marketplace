@@ -104,4 +104,4 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` to view the beautiful Carbon Credit Marketplace frontend and connect your Freighter / Stellar wallet!
+Open `http://localhost:3000`  to view the beautiful Carbon Credit Marketplace frontend and connect your Freighter / Stellar wallet!
