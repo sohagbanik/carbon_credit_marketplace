@@ -1,6 +1,6 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, Env, String,
+    contract, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env, String,
 };
 
 #[contracttype]
@@ -26,12 +26,12 @@ pub enum DataKey {
 pub struct Credit {
     pub id: u64,
     pub project_name: String,
-    pub carbon_amount: i128,
+    pub carbon_amount: i128, // Amount in tons
     pub creator_address: Address,
     pub owner_address: Address,
     pub verification_status: VerificationStatus,
     pub is_listed: bool,
-    pub price: i128,
+    pub price_per_ton: i128, // Price per ton instead of total price
     pub timestamp: u64,
 }
 
@@ -41,6 +41,8 @@ pub enum PurchaseStatus {
     Pending,
     Confirmed,
     Cancelled,
+    Disputed,
+    Resolved,
 }
 
 #[contracttype]
@@ -50,9 +52,11 @@ pub struct Purchase {
     pub credit_id: u64,
     pub buyer: Address,
     pub seller: Address,
-    pub price: i128,
+    pub amount_purchased: i128,
+    pub locked_funds: i128,
     pub status: PurchaseStatus,
     pub timestamp: u64,
+    pub deadline: u64, // Disallows normal cancellation until deadline passes
 }
 
 #[contract]
@@ -60,7 +64,6 @@ pub struct CarbonMarketplace;
 
 #[contractimpl]
 impl CarbonMarketplace {
-    /// Initialize the contract with a verifier admin and a stablecoin/token address
     pub fn init(env: Env, admin: Address, token: Address) {
         assert!(!env.storage().instance().has(&DataKey::Admin), "Already initialized");
         env.storage().instance().set(&DataKey::Admin, &admin);
@@ -69,7 +72,13 @@ impl CarbonMarketplace {
         env.storage().instance().set(&DataKey::PurchaseCount, &0u64);
     }
 
-    /// Anyone can create a credit, but it starts as Pending and cannot be listed yet
+    pub fn upgrade(env: Env, admin: Address, new_wasm_hash: BytesN<32>) {
+        admin.require_auth();
+        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        assert!(admin == stored_admin, "Only admin can upgrade");
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+    }
+
     pub fn create_credit(
         env: Env,
         creator: Address,
@@ -89,9 +98,9 @@ impl CarbonMarketplace {
             carbon_amount,
             creator_address: creator.clone(),
             owner_address: creator.clone(),
-            verification_status: VerificationStatus::Pending, // Prevents infinite mint abuse
+            verification_status: VerificationStatus::Pending,
             is_listed: false,
-            price: 0,
+            price_per_ton: 0,
             timestamp: env.ledger().timestamp(),
         };
 
@@ -101,7 +110,6 @@ impl CarbonMarketplace {
         count
     }
 
-    /// Admin verifies the credit authenticity off-chain, then updates status
     pub fn verify_credit(env: Env, admin: Address, credit_id: u64, status: VerificationStatus) {
         admin.require_auth();
         let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
@@ -114,36 +122,47 @@ impl CarbonMarketplace {
         env.events().publish((symbol_short!("verified"), credit_id), status);
     }
 
-    /// Owner lists a Verified credit for sale
-    pub fn list_credit(env: Env, owner: Address, credit_id: u64, price: i128) {
+    pub fn list_credit(env: Env, owner: Address, credit_id: u64, price_per_ton: i128) {
         owner.require_auth();
-        assert!(price > 0, "Price must be strictly positive");
+        assert!(price_per_ton > 0, "Price must be strictly positive");
 
         let mut credit: Credit = env.storage().persistent().get(&DataKey::Credit(credit_id)).expect("Credit not found");
         assert!(credit.owner_address == owner, "Only owner can list");
         assert!(credit.verification_status == VerificationStatus::Verified, "Credit not verified");
+        assert!(credit.carbon_amount > 0, "No carbon available to list");
 
         credit.is_listed = true;
-        credit.price = price;
+        credit.price_per_ton = price_per_ton;
         
         env.storage().persistent().set(&DataKey::Credit(credit_id), &credit);
-        env.events().publish((symbol_short!("listed"), credit_id), price);
+        env.events().publish((symbol_short!("listed"), credit_id), price_per_ton);
     }
 
-    /// Buyer purchases a listed credit. Tokens are moved to contract as Escrow.
-    pub fn buy_credit(env: Env, buyer: Address, credit_id: u64) -> u64 {
+    pub fn unlist_credit(env: Env, owner: Address, credit_id: u64) {
+        owner.require_auth();
+        let mut credit: Credit = env.storage().persistent().get(&DataKey::Credit(credit_id)).unwrap();
+        assert!(credit.owner_address == owner, "Only owner can unlist");
+        credit.is_listed = false;
+        env.storage().persistent().set(&DataKey::Credit(credit_id), &credit);
+        env.events().publish((symbol_short!("unlisted"), credit_id), owner);
+    }
+
+    pub fn buy_credit(env: Env, buyer: Address, credit_id: u64, amount: i128) -> u64 {
         buyer.require_auth();
+        assert!(amount > 0, "Must buy at least 1 ton");
 
         let mut credit: Credit = env.storage().persistent().get(&DataKey::Credit(credit_id)).expect("Credit not found");
-        assert!(credit.is_listed, "Credit is not listed for sale");
+        assert!(credit.is_listed, "Credit is not listed");
         assert!(credit.owner_address != buyer, "Owner cannot buy own credit");
+        assert!(credit.carbon_amount >= amount, "Insufficient carbon amount available");
+
+        let locked_funds = amount.checked_mul(credit.price_per_ton).expect("Price overflow");
 
         let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         let token_client = token::Client::new(&env, &token_addr);
         let contract_addr = env.current_contract_address();
 
-        // ESCROW FUNDS: Transfer from buyer to this contract
-        token_client.transfer(&buyer, &contract_addr, &credit.price);
+        token_client.transfer(&buyer, &contract_addr, &locked_funds);
 
         let mut p_count: u64 = env.storage().instance().get(&DataKey::PurchaseCount).unwrap();
         p_count += 1;
@@ -154,13 +173,17 @@ impl CarbonMarketplace {
             credit_id,
             buyer: buyer.clone(),
             seller: credit.owner_address.clone(),
-            price: credit.price,
+            amount_purchased: amount,
+            locked_funds,
             status: PurchaseStatus::Pending,
             timestamp: env.ledger().timestamp(),
+            deadline: env.ledger().timestamp() + 604800, // 7 days lock
         };
 
-        // Unlist to prevent double spending
-        credit.is_listed = false;
+        credit.carbon_amount -= amount;
+        if credit.carbon_amount == 0 {
+            credit.is_listed = false;
+        }
         
         env.storage().persistent().set(&DataKey::Purchase(p_count), &purchase);
         env.storage().persistent().set(&DataKey::Credit(credit_id), &credit);
@@ -170,59 +193,133 @@ impl CarbonMarketplace {
         p_count
     }
 
-    /// Buyer confirms physical/off-chain delivery. Funds released to Seller. Ownership transferred.
-    pub fn confirm_delivery(env: Env, buyer: Address, purchase_id: u64) {
+    pub fn confirm_delivery(env: Env, buyer: Address, purchase_id: u64) -> u64 {
         buyer.require_auth();
 
         let mut purchase: Purchase = env.storage().persistent().get(&DataKey::Purchase(purchase_id)).expect("Purchase not found");
         assert!(purchase.buyer == buyer, "Only buyer can confirm");
         assert!(purchase.status == PurchaseStatus::Pending, "Not a pending purchase");
 
-        let mut credit: Credit = env.storage().persistent().get(&DataKey::Credit(purchase.credit_id)).unwrap();
-
         let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         let token_client = token::Client::new(&env, &token_addr);
         let contract_addr = env.current_contract_address();
 
-        // RELEASE ESCROW: Funds go to seller
-        token_client.transfer(&contract_addr, &purchase.seller, &purchase.price);
+        token_client.transfer(&contract_addr, &purchase.seller, &purchase.locked_funds);
 
         purchase.status = PurchaseStatus::Confirmed;
-        credit.owner_address = buyer.clone(); // Transfer ownership permanently
 
+        // Generate a new credit struct representing the fractional ownership for the buyer
+        let mut count: u64 = env.storage().instance().get(&DataKey::CreditCount).unwrap();
+        count += 1;
+        env.storage().instance().set(&DataKey::CreditCount, &count);
+
+        let parent_credit: Credit = env.storage().persistent().get(&DataKey::Credit(purchase.credit_id)).unwrap();
+
+        let new_credit = Credit {
+            id: count,
+            project_name: parent_credit.project_name,
+            carbon_amount: purchase.amount_purchased,
+            creator_address: parent_credit.creator_address,
+            owner_address: buyer.clone(),
+            verification_status: VerificationStatus::Verified,
+            is_listed: false,
+            price_per_ton: 0,
+            timestamp: env.ledger().timestamp(),
+        };
+
+        env.storage().persistent().set(&DataKey::Credit(count), &new_credit);
         env.storage().persistent().set(&DataKey::Purchase(purchase_id), &purchase);
-        env.storage().persistent().set(&DataKey::Credit(purchase.credit_id), &credit);
 
-        env.events().publish((symbol_short!("released"), purchase_id), buyer);
+        env.events().publish((symbol_short!("released"), purchase_id), count);
+        
+        count // returns the ID of the new fractional credit
     }
 
-    /// Buyer or Seller can cancel a pending order. Escrow refunded to Buyer.
     pub fn cancel_purchase(env: Env, caller: Address, purchase_id: u64) {
         caller.require_auth();
 
         let mut purchase: Purchase = env.storage().persistent().get(&DataKey::Purchase(purchase_id)).expect("Purchase not found");
         assert!(purchase.buyer == caller || purchase.seller == caller, "Only buyer or seller can cancel");
         assert!(purchase.status == PurchaseStatus::Pending, "Not a pending purchase");
-
-        let mut credit: Credit = env.storage().persistent().get(&DataKey::Credit(purchase.credit_id)).unwrap();
+        
+        // Critical Fix: Time-lock expiration check
+        assert!(env.ledger().timestamp() > purchase.deadline, "Deadline has not expired yet");
 
         let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         let token_client = token::Client::new(&env, &token_addr);
         let contract_addr = env.current_contract_address();
 
-        // REFUND BUYER: Escrow returned
-        token_client.transfer(&contract_addr, &purchase.buyer, &purchase.price);
+        token_client.transfer(&contract_addr, &purchase.buyer, &purchase.locked_funds);
 
         purchase.status = PurchaseStatus::Cancelled;
-        credit.is_listed = true; // Relist the credit since sale fell through
-
+        
+        let mut credit: Credit = env.storage().persistent().get(&DataKey::Credit(purchase.credit_id)).unwrap();
+        credit.carbon_amount += purchase.amount_purchased; // Returns the carbon back to seller's supply
+        // we can implicitly relist it if we want, or just leave it out
+        
         env.storage().persistent().set(&DataKey::Purchase(purchase_id), &purchase);
         env.storage().persistent().set(&DataKey::Credit(purchase.credit_id), &credit);
 
         env.events().publish((symbol_short!("cancelled"), purchase_id), caller);
     }
 
-    // ====== Read Methods ======
+    pub fn resolve_dispute(env: Env, admin: Address, purchase_id: u64, refund_buyer: bool) {
+        admin.require_auth();
+        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        assert!(admin == stored_admin, "Only admin can resolve");
+
+        let mut purchase: Purchase = env.storage().persistent().get(&DataKey::Purchase(purchase_id)).unwrap();
+        assert!(purchase.status == PurchaseStatus::Pending || purchase.status == PurchaseStatus::Disputed, "Not disputable");
+
+        let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
+        let token_client = token::Client::new(&env, &token_addr);
+        let contract_addr = env.current_contract_address();
+
+        if refund_buyer {
+            token_client.transfer(&contract_addr, &purchase.buyer, &purchase.locked_funds);
+            let mut credit: Credit = env.storage().persistent().get(&DataKey::Credit(purchase.credit_id)).unwrap();
+            credit.carbon_amount += purchase.amount_purchased;
+            env.storage().persistent().set(&DataKey::Credit(purchase.credit_id), &credit);
+            purchase.status = PurchaseStatus::Resolved;
+        } else {
+            // Pay seller (arbitration sides with seller)
+            token_client.transfer(&contract_addr, &purchase.seller, &purchase.locked_funds);
+            // Mint to buyer
+            let mut count: u64 = env.storage().instance().get(&DataKey::CreditCount).unwrap();
+            count += 1;
+            env.storage().instance().set(&DataKey::CreditCount, &count);
+
+            let parent_credit: Credit = env.storage().persistent().get(&DataKey::Credit(purchase.credit_id)).unwrap();
+
+            let new_credit = Credit {
+                id: count,
+                project_name: parent_credit.project_name,
+                carbon_amount: purchase.amount_purchased,
+                creator_address: parent_credit.creator_address,
+                owner_address: purchase.buyer.clone(),
+                verification_status: VerificationStatus::Verified,
+                is_listed: false,
+                price_per_ton: 0,
+                timestamp: env.ledger().timestamp(),
+            };
+            env.storage().persistent().set(&DataKey::Credit(count), &new_credit);
+            purchase.status = PurchaseStatus::Resolved;
+        }
+
+        env.storage().persistent().set(&DataKey::Purchase(purchase_id), &purchase);
+        env.events().publish((symbol_short!("resolved"), purchase_id), refund_buyer);
+    }
+
+    pub fn mark_disputed(env: Env, caller: Address, purchase_id: u64) {
+        caller.require_auth();
+        let mut purchase: Purchase = env.storage().persistent().get(&DataKey::Purchase(purchase_id)).unwrap();
+        assert!(purchase.buyer == caller || purchase.seller == caller, "Not involved");
+        assert!(purchase.status == PurchaseStatus::Pending, "Cannot dispute");
+        purchase.status = PurchaseStatus::Disputed;
+        env.storage().persistent().set(&DataKey::Purchase(purchase_id), &purchase);
+    }
+
+    // Read Methods
     pub fn get_credit(env: Env, credit_id: u64) -> Credit {
         env.storage().persistent().get(&DataKey::Credit(credit_id)).expect("Credit not found")
     }
