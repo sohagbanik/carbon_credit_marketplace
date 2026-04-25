@@ -31,6 +31,7 @@ The Soroban `CarbonMarketplace` smart contract exposes the following core functi
 * `create_credit(env, creator, project_name, carbon_amount)`: Mint a new carbon credit with a given weight (in tons). Only the creator is authorized to trigger this.
 * `verify_credit(env, admin, credit_id, status)`: Confirms that an off-chain project is valid. (This is the only admin-gated function to prevent fraud).
 * `list_credit(env, owner, credit_id, price_per_ton)`: Lists a verified credit for sale at a specific price per ton.
+* `create_listing(env, creator, project_name, description, carbon_amount, price_per_ton)`: An all-in-one function to mint and list a credit in a single transaction.
 * `buy_credit(env, buyer, credit_id, amount)`: Initiates a purchase. Calculates the exact crypto required, locks the funds in escrow, and subtracts the supply from the listing.
 * `confirm_delivery(env, buyer, purchase_id)`: Finalizes the escrow. RELEASES funds to the seller, and MINTS a new sub-credit for the buyer reflecting their exact fractional amount purchased.
 * `cancel_purchase(env, caller, purchase_id)`: Reverses the transaction if a built-in time-lock (7 days) has passed without confirmed delivery.
@@ -105,3 +106,22 @@ npm run dev
 ```
 
 Open `http://localhost:3000`  to view the beautiful Carbon Credit Marketplace frontend and connect your Freighter / Stellar wallet!
+
+---
+
+## 🎥 Demo Walkthrough Data
+
+If you are evaluating this project or recording a demo, use the following mock data to simulate a realistic enterprise carbon transaction:
+
+### 1. Creating a Listing (Seller)
+* **Project Name:** `Amazon Reforestation Initiative - Phase II`
+* **Description:** `A Gold Standard certified reforestation and direct air capture project located in the Brazilian Amazon. This initiative restores degraded land and employs local indigenous communities, capturing CO2 directly from the atmosphere.`
+* **Amount (Total Supply):** `5000` (metric tons)
+* **Price Per Ton:** `25` (testnet XLM/tokens)
+
+### 2. Buying Credits (Buyer)
+* **Amount to Buy:** `100` (tons)
+* **Total Escrow Lockup:** `2500` tokens (automatically locked in escrow for 7 days)
+
+### 3. Escrow & Dispute Resolution (Admin)
+If the off-chain carbon retirement certificate is flagged as invalid, the buyer can mark the transaction as disputed. The **Admin** can then call `resolve_dispute(refund_buyer = true)` to safely route the 2500 tokens back to the buyer, preventing fraud.
