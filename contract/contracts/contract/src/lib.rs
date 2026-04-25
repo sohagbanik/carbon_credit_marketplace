@@ -110,6 +110,42 @@ impl CarbonMarketplace {
         count
     }
 
+    pub fn create_listing(
+        env: Env,
+        creator: Address,
+        project_name: String,
+        description: String,
+        carbon_amount: i128,
+        price_per_ton: i128,
+    ) -> u64 {
+        creator.require_auth();
+        assert!(carbon_amount > 0, "Carbon amount must be strictly positive");
+        assert!(price_per_ton > 0, "Price must be strictly positive");
+
+        let mut count: u64 = env.storage().instance().get(&DataKey::CreditCount).unwrap();
+        count += 1;
+        env.storage().instance().set(&DataKey::CreditCount, &count);
+
+        let credit = Credit {
+            id: count,
+            project_name,
+            // Note: 'description' is accepted to match frontend args, but not stored 
+            // on-chain to save storage fees and avoid breaking the Credit struct.
+            carbon_amount,
+            creator_address: creator.clone(),
+            owner_address: creator.clone(),
+            verification_status: VerificationStatus::Pending,
+            is_listed: true,
+            price_per_ton,
+            timestamp: env.ledger().timestamp(),
+        };
+
+        env.storage().persistent().set(&DataKey::Credit(count), &credit);
+        env.events().publish((symbol_short!("listed"), count), creator);
+
+        count
+    }
+
     pub fn verify_credit(env: Env, admin: Address, credit_id: u64, status: VerificationStatus) {
         admin.require_auth();
         let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
