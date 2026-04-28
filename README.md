@@ -1,3 +1,4 @@
+<img width="1178" height="197" alt="Screenshot 2026-04-29 002845" src="https://github.com/user-attachments/assets/4af35046-c509-4113-a820-1bf92217044a" />
 # 🌱 Carbon Credit Marketplace — Permissionless DApp on Stellar
 
 A fully decentralized, permissionless Carbon Credit Marketplace built on the Stellar blockchain using Soroban smart contracts. List, buy, and trade carbon credits with automated escrow — no central authority required.
@@ -142,8 +143,7 @@ This runs the Soroban tests covering:
 
 ### Test Output Screenshot
 
-<!-- TODO: Replace with your test screenshot URL -->
-![Test Results](TODO_SCREENSHOT_URL)
+<img width="1178" height="197" alt="Screenshot 2026-04-29 002845" src="https://github.com/user-attachments/assets/e954d7f6-07f8-4e14-a5c4-0223df05c25b" />
 
 ---
 
