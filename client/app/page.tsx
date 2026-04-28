@@ -85,7 +85,7 @@ export default function Home() {
           </h1>
 
           <p className="mx-auto max-w-lg text-sm sm:text-base leading-relaxed text-white/40">
-            Register products, track shipments, and verify authenticity — immutably on Stellar.
+            List, buy, and trade carbon credits with automated escrow — immutably on Stellar.
           </p>
 
           {/* Inline stats */}

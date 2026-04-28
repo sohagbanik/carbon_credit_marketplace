@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Stellar Dapp",
+  title: "Carbon Credit Marketplace — Decentralized Trading on Stellar",
   description:
-    "Fullstack Dapp built on Stellar",
+    "A fully decentralized, permissionless carbon credit marketplace built on Stellar with Soroban smart contracts. List, buy, and trade carbon credits with automated escrow.",
 };
 
 export default function RootLayout({
