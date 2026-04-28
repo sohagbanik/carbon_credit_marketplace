@@ -1,5 +1,7 @@
 "use client";
 
+import { cache, cacheKey } from "@/lib/cache";
+
 import {
   Contract,
   Networks,
@@ -108,8 +110,18 @@ export async function callContract(
   caller: string,
   sign: boolean = true
 ) {
+  // Wrap getAccount in its own try-catch — the Stellar SDK can throw
+  // complex error objects that crash the browser tab
+  let account;
+  try {
+    account = await server.getAccount(caller);
+  } catch (err) {
+    throw new Error(
+      `Account not found: ${caller}. Make sure the account is funded on testnet.`
+    );
+  }
+
   const contract = new Contract(CONTRACT_ADDRESS);
-  const account = await server.getAccount(caller);
 
   const tx = new TransactionBuilder(account, {
     fee: "100",
@@ -119,7 +131,14 @@ export async function callContract(
     .setTimeout(30)
     .build();
 
-  const simulated = await server.simulateTransaction(tx);
+  let simulated;
+  try {
+    simulated = await server.simulateTransaction(tx);
+  } catch (err) {
+    throw new Error(
+      `Simulation error: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
 
   if (rpc.Api.isSimulationError(simulated)) {
     throw new Error(
@@ -173,18 +192,34 @@ export async function readContract(
   params: xdr.ScVal[] = [],
   caller?: string
 ) {
-  const account =
-    caller || Keypair.random().publicKey(); // Use a random keypair for read-only
-  const sim = await callContract(method, params, account, false);
-  if (
-    rpc.Api.isSimulationSuccess(sim as rpc.Api.SimulateTransactionResponse) &&
-    (sim as rpc.Api.SimulateTransactionSuccessResponse).result
-  ) {
-    return scValToNative(
-      (sim as rpc.Api.SimulateTransactionSuccessResponse).result!.retval
-    );
+  try {
+    // Use caller, or connected wallet — never use random keys (they don't exist on testnet)
+    const account = caller || (await getWalletAddress());
+    if (!account) {
+      throw new Error("No wallet connected. Please connect your Freighter wallet.");
+    }
+
+    // Check cache first
+    const key = cacheKey(method, ...params.map(String));
+    const cached = cache.get(key);
+    if (cached !== undefined) return cached;
+
+    const sim = await callContract(method, params, account, false);
+    if (
+      rpc.Api.isSimulationSuccess(sim as rpc.Api.SimulateTransactionResponse) &&
+      (sim as rpc.Api.SimulateTransactionSuccessResponse).result
+    ) {
+      const result = scValToNative(
+        (sim as rpc.Api.SimulateTransactionSuccessResponse).result!.retval
+      );
+      cache.set(key, result);
+      return result;
+    }
+    return null;
+  } catch (err) {
+    console.error(`readContract(${method}) failed:`, err);
+    throw err;
   }
-  return null;
 }
 
 // ============================================================
@@ -237,7 +272,7 @@ export async function createListing(
   projectName: string,
   projectDescription: string
 ) {
-  return callContract(
+  const result = await callContract(
     "create_listing",
     [
       toScValAddress(seller),
@@ -249,6 +284,8 @@ export async function createListing(
     seller,
     true
   );
+  cache.clear(); // Invalidate cache after write
+  return result;
 }
 
 /**
@@ -265,12 +302,14 @@ export async function buyCredits(
   listingId: bigint,
   amount: bigint
 ) {
-  return callContract(
+  const result = await callContract(
     "buy_credits",
     [toScValAddress(buyer), toScValU64(listingId), toScValI128(amount)],
     buyer,
     true
   );
+  cache.clear();
+  return result;
 }
 
 /**
@@ -284,12 +323,14 @@ export async function deliverCredits(
   seller: string,
   purchaseId: bigint
 ) {
-  return callContract(
+  const result = await callContract(
     "deliver_credits",
     [toScValAddress(seller), toScValU64(purchaseId)],
     seller,
     true
   );
+  cache.clear();
+  return result;
 }
 
 /**
@@ -303,12 +344,14 @@ export async function confirmDelivery(
   buyer: string,
   purchaseId: bigint
 ) {
-  return callContract(
+  const result = await callContract(
     "confirm_delivery",
     [toScValAddress(buyer), toScValU64(purchaseId)],
     buyer,
     true
   );
+  cache.clear();
+  return result;
 }
 
 /**
@@ -322,12 +365,14 @@ export async function cancelPurchase(
   buyer: string,
   purchaseId: bigint
 ) {
-  return callContract(
+  const result = await callContract(
     "cancel_purchase",
     [toScValAddress(buyer), toScValU64(purchaseId)],
     buyer,
     true
   );
+  cache.clear();
+  return result;
 }
 
 /**
