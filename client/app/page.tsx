@@ -112,9 +112,9 @@ export default function Home() {
 
         {/* Footer */}
         <div className="mt-10 flex flex-col items-center gap-4 animate-fade-in">
-          {/* Supply chain flow */}
+          {/* Carbon credit flow */}
           <div className="flex items-center gap-3 text-xs text-white/20">
-            {["Created", "Shipped", "Delivered"].map((step, i) => (
+            {["Listed", "Purchased", "Delivered"].map((step, i) => (
               <span key={step} className="flex items-center gap-3">
                 <span className="flex items-center gap-1.5">
                   <span
