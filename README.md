@@ -1,127 +1,225 @@
-# 🌱 Carbon Credit Marketplace (Permissionless DApp)
+# 🌱 Carbon Credit Marketplace — Permissionless DApp on Stellar
 
-A fully decentralized, permissionless Carbon Credit Marketplace built on the Stellar blockchain using Soroban smart contracts. 
-
-This platform allows anyone to list, buy, and trade carbon credits without any central authority — ensuring transparency, security, and trust.
+A fully decentralized, permissionless Carbon Credit Marketplace built on the Stellar blockchain using Soroban smart contracts. List, buy, and trade carbon credits with automated escrow — no central authority required.
 
 🔗 **Live Demo:** https://carbon-credit-marketplace-sage.vercel.app/
+
+🎬 **Demo Video:** [Watch 1-min walkthrough](YOUR_VIDEO_LINK_HERE)
+
+---
+
+## 📑 Table of Contents
+
+- [Project Description](#-project-description)
+- [Core Features](#-core-features)
+- [Smart Contract Functions](#-smart-contract-functions)
+- [Tech Stack](#-tech-stack)
+- [Getting Started](#-getting-started)
+- [Testing](#-testing)
+- [Caching Strategy](#-caching-strategy)
+- [Project Structure](#-project-structure)
+- [Demo Walkthrough Data](#-demo-walkthrough-data)
 
 ---
 
 ## 🚀 Project Description
 
-The Carbon Credit Marketplace is a blockchain-based decentralized application (dApp) that enables the open trading of carbon credits. 
-Unlike traditional systems, this marketplace is **completely permissionless**, meaning there are no admin gates for participation. Anyone can list a verified carbon project, and any user with a Stellar Wallet can buy fractional or total ownership of these credits.
+The Carbon Credit Marketplace is a blockchain-based decentralized application (dApp) that enables the open trading of carbon credits. Unlike traditional systems, this marketplace is **completely permissionless**, meaning there are no admin gates for participation. Anyone can list a verified carbon project, and any user with a Stellar Wallet can buy fractional or total ownership of these credits.
 
-The platform is powered by a robust **Rust Backend** utilizing the **Soroban Rust SDK**. The contract handles the intricate rules of carbon trading: automated escrow, fractional credit segmentation, verification status checks, and time-locked dispute resolution. 
+The platform is powered by a robust **Rust Backend** utilizing the **Soroban Rust SDK**. The contract handles the intricate rules of carbon trading: automated escrow, fractional credit segmentation, verification status checks, and time-locked dispute resolution.
 
 ### ✨ Core Features
+
 - **🔓 Fully Permissionless:** No central authority to approve participation.
-- **🌍 Decentralized Escrow:** Funds are securely locked in the contract until the buyer confirms the delivery of their credits.
-- **⚡ Fractional Trading:** Smart contracts automatically mint new fractional credits when partial amounts are purchased.
-- **⚖️ Dispute Resolution:** Built-in mechanisms to freeze funds and trigger arbitration if the time-lock expires.
+- **🌍 Decentralized Escrow:** Funds are securely locked in the contract until the buyer confirms delivery.
+- **⚡ Fractional Trading:** Smart contracts automatically mint fractional credits for partial purchases.
+- **⚖️ Dispute Resolution:** Built-in mechanisms to freeze funds and trigger arbitration.
+- **📦 In-Memory Caching:** TTL-based caching reduces redundant RPC calls for read-only queries.
+- **🧪 Comprehensive Testing:** 20+ frontend tests + Rust contract tests.
 
 ---
 
 ## 🧠 Smart Contract Functions
 
-The Soroban `CarbonMarketplace` smart contract exposes the following core functions:
-
-* `init(env, admin, token)`: Initializes the contract with an admin and an accepted payment token.
-* `create_credit(env, creator, project_name, carbon_amount)`: Mint a new carbon credit with a given weight (in tons). Only the creator is authorized to trigger this.
-* `verify_credit(env, admin, credit_id, status)`: Confirms that an off-chain project is valid. (This is the only admin-gated function to prevent fraud).
-* `list_credit(env, owner, credit_id, price_per_ton)`: Lists a verified credit for sale at a specific price per ton.
-* `create_listing(env, creator, project_name, description, carbon_amount, price_per_ton)`: An all-in-one function to mint and list a credit in a single transaction.
-* `buy_credit(env, buyer, credit_id, amount)`: Initiates a purchase. Calculates the exact crypto required, locks the funds in escrow, and subtracts the supply from the listing.
-* `confirm_delivery(env, buyer, purchase_id)`: Finalizes the escrow. RELEASES funds to the seller, and MINTS a new sub-credit for the buyer reflecting their exact fractional amount purchased.
-* `cancel_purchase(env, caller, purchase_id)`: Reverses the transaction if a built-in time-lock (7 days) has passed without confirmed delivery.
-* `resolve_dispute(env, admin, purchase_id, refund_buyer)`: Handles edge cases where parties cannot agree on delivery.
-
----
-
-## 📦 Prerequisites
-
-Before deploying the Soroban contract or running the frontend, ensure you have the following installed:
-
-1. **Rust:** Instructions at [rustup.rs](https://rustup.rs/) (Ensure `target wasm32-unknown-unknown` is added via `rustup target add wasm32-unknown-unknown`).
-2. **Soroban CLI:** Install via `cargo install --locked soroban-cli`.
-3. **Node.js:** v18 or higher (for the Next.js frontend).
+| Function | Description |
+|----------|-------------|
+| `create_listing` | Create a new carbon credit listing with amount, price, and project details |
+| `buy_credits` | Purchase credits from a listing (locks funds in escrow) |
+| `deliver_credits` | Seller marks credits as delivered |
+| `confirm_delivery` | Buyer confirms receipt, releasing escrowed payment to seller |
+| `cancel_purchase` | Buyer cancels a pending purchase (refunds to listing) |
+| `get_listing` | Get listing details by ID (read-only) |
+| `get_purchase` | Get purchase details by ID (read-only) |
+| `get_user_credits` | Get a user's carbon credit balance (read-only) |
+| `get_active_listings` | Get all active listings (read-only) |
+| `get_user_purchases` | Get all purchases for a user (read-only) |
 
 ---
 
-## 🛠️ How to Run
+## 🔧 Tech Stack
 
-### Step 1: Contract deployment (Stellar Testnet)
+| Layer | Technology |
+|-------|-----------|
+| **Smart Contract** | Rust + Soroban SDK |
+| **Frontend** | Next.js 16, React 19, TypeScript |
+| **Styling** | Tailwind CSS 4 |
+| **Wallet** | Freighter (Stellar) |
+| **Blockchain** | Stellar Testnet (Soroban) |
+| **Testing** | Vitest (frontend), Cargo test (contract) |
+| **Deployment** | Vercel |
 
-Navigate to the contract directory:
+---
+
+## 🏁 Getting Started
+
+### Prerequisites
+
+- **Rust** — [rustup.rs](https://rustup.rs/) (add `wasm32-unknown-unknown` target)
+- **Soroban CLI** — `cargo install --locked soroban-cli`
+- **Node.js** — v18 or higher
+- **Freighter Wallet** — [Chrome Extension](https://www.freighter.app/)
+
+### Clone & Install
+
+```bash
+git clone https://github.com/sohagbanik/carbon_credit_marketplace.git
+cd carbon_credit_marketplace/client
+npm install
+```
+
+### Run Locally
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to view the marketplace.
+
+### Deploy Contract (Stellar Testnet)
+
 ```bash
 cd contract/contracts/contract
-```
-
-#### Generate a Testnet Identity
-Generate a local Soroban identity (e.g., `alice`) to deploy and interact with the contract.
-```bash
 soroban config identity generate alice
-```
-
-#### Fund the Identity via Friendbot
-Request funds from the Stellar Testnet Friendbot to pay for transactions.
-```bash
 soroban config identity fund alice --network testnet
-```
-
-#### Build the Contract
-Compile the Rust code into a WebAssembly (.wasm) file.
-```bash
 soroban contract build
-```
-
-#### Deploy to Testnet
-Deploy the compiled WASM binary to the Stellar Testnet. 
-```bash
 soroban contract deploy \
   --wasm target/wasm32-unknown-unknown/release/contract.wasm \
   --source alice \
   --network testnet
 ```
-*(Save the outputted Contract ID for use in your frontend environment variables!)*
 
-#### Run Edge-Case Tests
-The project features a suite of tests that mock the Soroban environment. You can verify the behavior of escrow locks, unauthorized access, and insufficient credit bounds.
+---
+
+## 🧪 Testing
+
+### Frontend Tests (Vitest)
+
 ```bash
+cd client
+npm test
+```
+
+This runs the Vitest test suite with **20+ tests** covering:
+
+- **Cache utility** — TTL expiry, get/set, key building, clear/delete
+- **Contract helpers** — Constants validation, ScVal conversion functions (string, bool, address, u32, i128, u64)
+- **Component logic** — Address truncation, amount formatting, status configs, tab navigation
+
+### Smart Contract Tests (Rust)
+
+```bash
+cd contract
 cargo test
 ```
 
-### Step 2: Frontend Client
+This runs the Soroban tests covering:
 
-Open a new terminal and navigate to the frontend directory:
-```bash
-cd client
+- Listing creation & validation
+- Credit purchasing & escrow logic
+- Delivery confirmation & payment release
+- Purchase cancellation & refund
+- Edge cases & error conditions
+
+### Test Output Screenshot
+
+<!-- TODO: Replace with your test screenshot URL -->
+![Test Results](TODO_SCREENSHOT_URL)
+
+---
+
+## 💾 Caching Strategy
+
+The application implements an **in-memory TTL cache** (`lib/cache.ts`) to minimize redundant Soroban RPC calls:
+
+| Setting | Value |
+|---------|-------|
+| **Default TTL** | 30 seconds |
+| **Cache Scope** | All read-only contract calls |
+| **Invalidation** | Full cache clear on any write operation |
+
+### How It Works
+
+1. **Read calls** (`getListing`, `getActiveListings`, `getUserCredits`, etc.) check the cache first
+2. On **cache miss**, the RPC result is fetched and stored with a 30s TTL
+3. On **any write** (`createListing`, `buyCredits`, `deliverCredits`, etc.), the entire cache is cleared
+4. **Expired entries** are automatically evicted on the next read
+
+---
+
+## 📁 Project Structure
+
 ```
-
-Install the required NPM packages and run the development server:
-```bash
-npm install
-npm run dev
+carbon_credit_marketplace/
+├── client/                     # Next.js frontend
+│   ├── __tests__/              # Vitest test suites
+│   │   ├── cache.test.ts       # Cache utility tests
+│   │   ├── contract.test.ts    # Contract helper tests
+│   │   └── components.test.ts  # Component logic tests
+│   ├── app/                    # Next.js app router
+│   │   ├── layout.tsx          # Root layout + SEO
+│   │   ├── page.tsx            # Home page
+│   │   └── globals.css         # Global styles
+│   ├── components/             # React components
+│   │   ├── Contract.tsx        # Main marketplace UI
+│   │   ├── Navbar.tsx          # Navigation bar
+│   │   └── ui/                 # Reusable UI primitives
+│   ├── hooks/
+│   │   └── contract.ts         # Soroban contract integration
+│   ├── lib/
+│   │   ├── cache.ts            # In-memory TTL cache
+│   │   └── utils.ts            # Utility functions
+│   ├── vitest.config.ts        # Test configuration
+│   └── package.json
+├── contract/                   # Soroban smart contract (Rust)
+│   └── contracts/contract/
+│       └── src/
+│           ├── lib.rs          # Contract implementation
+│           └── test.rs         # Contract tests
+└── README.md
 ```
-
-Open `http://localhost:3000`  to view the beautiful Carbon Credit Marketplace frontend and connect your Freighter / Stellar wallet!
 
 ---
 
 ## 🎥 Demo Walkthrough Data
 
-If you are evaluating this project or recording a demo, use the following mock data to simulate a realistic enterprise carbon transaction:
+If you are evaluating this project or recording a demo, use the following mock data:
 
 ### 1. Creating a Listing (Seller)
 * **Project Name:** `Amazon Reforestation Initiative - Phase II`
-* **Description:** `A Gold Standard certified reforestation and direct air capture project located in the Brazilian Amazon. This initiative restores degraded land and employs local indigenous communities, capturing CO2 directly from the atmosphere.`
+* **Description:** `A Gold Standard certified reforestation and direct air capture project in the Brazilian Amazon. Restores degraded land and employs local indigenous communities.`
 * **Amount (Total Supply):** `5000` (metric tons)
 * **Price Per Ton:** `25` (testnet XLM/tokens)
 
 ### 2. Buying Credits (Buyer)
 * **Amount to Buy:** `100` (tons)
-* **Total Escrow Lockup:** `2500` tokens (automatically locked in escrow for 7 days)
+* **Total Escrow Lockup:** `2500` tokens (automatically locked in escrow)
 
-### 3. Escrow & Dispute Resolution (Admin)
-If the off-chain carbon retirement certificate is flagged as invalid, the buyer can mark the transaction as disputed. The **Admin** can then call `resolve_dispute(refund_buyer = true)` to safely route the 2500 tokens back to the buyer, preventing fraud.
+### 3. Delivery Confirmation
+* Seller clicks **"Deliver Credits"** after off-chain verification
+* Buyer clicks **"Confirm Receipt"** to release escrowed payment
+
+---
+
+## 📄 License
+
+MIT
