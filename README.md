@@ -11,8 +11,10 @@ A fully decentralized, permissionless Carbon Credit Marketplace built on the Ste
 ## 📑 Table of Contents
 
 - [Project Description](#-project-description)
+- [Screenshots](#-screenshots)
 - [Core Features](#-core-features)
 - [Smart Contract Functions](#-smart-contract-functions)
+- [Smart Contract Architecture](#-smart-contract-architecture)
 - [Tech Stack](#-tech-stack)
 - [Getting Started](#-getting-started)
 - [Testing](#-testing)
@@ -35,7 +37,26 @@ The platform is powered by a robust **Rust Backend** utilizing the **Soroban Rus
 - **⚡ Fractional Trading:** Smart contracts automatically mint fractional credits for partial purchases.
 - **⚖️ Dispute Resolution:** Built-in mechanisms to freeze funds and trigger arbitration.
 - **📦 In-Memory Caching:** TTL-based caching reduces redundant RPC calls for read-only queries.
-- **🧪 Comprehensive Testing:** 20+ frontend tests + Rust contract tests.
+- **🧪 Comprehensive Testing:** 38+ frontend tests + Rust contract tests.
+
+---
+
+## 📸 Screenshots
+
+### Marketplace UI — Browse Listings
+
+<!-- TODO: Replace with your Browse tab screenshot -->
+![Browse Listings](TODO_UI_BROWSE_SCREENSHOT)
+
+### List Credits Tab
+
+<!-- TODO: Replace with your List Credits tab screenshot -->
+![List Credits](TODO_UI_LIST_SCREENSHOT)
+
+### My Credits & Purchases
+
+<!-- TODO: Replace with your Purchases tab screenshot -->
+![Purchases](TODO_UI_PURCHASES_SCREENSHOT)
 
 ---
 
@@ -53,6 +74,36 @@ The platform is powered by a robust **Rust Backend** utilizing the **Soroban Rus
 | `get_user_credits` | Get a user's carbon credit balance (read-only) |
 | `get_active_listings` | Get all active listings (read-only) |
 | `get_user_purchases` | Get all purchases for a user (read-only) |
+
+---
+
+## 🏗️ Smart Contract Architecture
+
+The Soroban smart contract is written in Rust and manages the full lifecycle of carbon credit trading:
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
+│   Seller    │────▶│ create_listing│────▶│  Active Listing │
+└─────────────┘     └──────────────┘     └────────┬────────┘
+                                                  │
+┌─────────────┐     ┌──────────────┐              ▼
+│   Buyer     │────▶│  buy_credits │────▶ Escrow (Pending)
+└─────────────┘     └──────────────┘         │         │
+                                             ▼         ▼
+                                    deliver_credits  cancel_purchase
+                                             │         │
+                                             ▼         ▼
+                                    confirm_delivery  Refund
+                                             │
+                                             ▼
+                                      Payment Released
+```
+
+### Key Design Decisions
+- **No admin gates** — anyone can list and buy credits
+- **Escrow-based** — funds are locked until delivery is confirmed
+- **Fractional support** — partial purchases are supported via remaining_amount tracking
+- **Cache invalidation** — all write operations clear the frontend cache
 
 ---
 
